@@ -1,8 +1,8 @@
 // TTS 路由
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router } from 'express';
 import { generateTTS, generateTTSSegments } from '../controllers/ttsController';
 
-const router: Router = Router();
+const router = Router();
 
 // POST /tts - 生成单段语音
 router.post('/', generateTTS);
