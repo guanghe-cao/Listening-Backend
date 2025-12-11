@@ -1,0 +1,35 @@
+// Prisma Schema
+// SQLite 数据库配置
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  username     String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  articles     Article[]
+
+  @@map("users")
+}
+
+model Article {
+  id          String   @id @default(uuid())
+  title       String
+  preview     String
+  content     String
+  createdAt   DateTime @default(now())
+  isImportant Boolean  @default(false)
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@map("articles")
+}
+
