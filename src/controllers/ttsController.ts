@@ -1,8 +1,8 @@
 // TTS 控制器
 import { RequestHandler } from 'express';
 
-// Import from the JavaScript service (we'll need to create type declarations or convert it later)
-// For now, we'll use require to import the JS service
+// Import from the JavaScript service
+// The service file will be copied to dist/services/ during build
 const dashscopeTtsService = require('../services/dashscopeTtsService');
 const {
   generateSingleTTS,
