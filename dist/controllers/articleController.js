@@ -1,9 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getArticles = getArticles;
-exports.getArticleById = getArticleById;
+exports.getArticleById = exports.getArticles = void 0;
 const prisma_1 = require("../lib/prisma");
-async function getArticles(req, res, next) {
+const getArticles = async (req, res, next) => {
     try {
         const userId = req.userId; // Middleware ensures this exists
         // Fetch articles for this user, sorted by createdAt descending
@@ -36,8 +35,9 @@ async function getArticles(req, res, next) {
         console.error('Error fetching articles:', error);
         next(error);
     }
-}
-async function getArticleById(req, res, next) {
+};
+exports.getArticles = getArticles;
+const getArticleById = async (req, res, next) => {
     try {
         // Get userId from header (middleware should have set it, but double-check)
         const userId = req.userId || req.headers['x-user-id'];
@@ -85,5 +85,6 @@ async function getArticleById(req, res, next) {
         res.status(500).json({ error: 'Internal server error' });
         return;
     }
-}
+};
+exports.getArticleById = getArticleById;
 //# sourceMappingURL=articleController.js.map

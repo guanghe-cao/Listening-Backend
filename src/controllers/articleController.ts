@@ -1,5 +1,5 @@
 // Article controller
-import { Request, Response, NextFunction } from 'express';
+import { RequestHandler } from 'express';
 import { prisma } from '../lib/prisma';
 
 interface ArticleListItem {
@@ -20,11 +20,7 @@ interface ArticleDetail {
   authorId: string;
 }
 
-export async function getArticles(
-  req: Request,
-  res: Response<ArticleListItem[]>,
-  next: NextFunction
-): Promise<void> {
+export const getArticles: RequestHandler = async (req, res, next) => {
   try {
     const userId = req.userId!; // Middleware ensures this exists
 
@@ -59,13 +55,9 @@ export async function getArticles(
     console.error('Error fetching articles:', error);
     next(error);
   }
-}
+};
 
-export async function getArticleById(
-  req: Request<{ id: string }>,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
+export const getArticleById: RequestHandler = async (req, res, next) => {
   try {
     // Get userId from header (middleware should have set it, but double-check)
     const userId = req.userId || (req.headers['x-user-id'] as string);
@@ -119,4 +111,4 @@ export async function getArticleById(
     res.status(500).json({ error: 'Internal server error' });
     return;
   }
-}
+};
