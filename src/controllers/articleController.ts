@@ -71,13 +71,15 @@ export async function getArticleById(
     const userId = req.userId || (req.headers['x-user-id'] as string);
 
     if (!userId) {
-      return res.status(400).json({ error: 'Missing x-user-id' });
+      res.status(400).json({ error: 'Missing x-user-id' });
+      return;
     }
 
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({ error: 'Article ID is required' });
+      res.status(400).json({ error: 'Article ID is required' });
+      return;
     }
 
     // Load article by id
@@ -96,7 +98,8 @@ export async function getArticleById(
 
     // Verify article exists and belongs to user
     if (!article || article.authorId !== userId) {
-      return res.status(404).json({ error: 'Article not found' });
+      res.status(404).json({ error: 'Article not found' });
+      return;
     }
 
     // Return plain JSON object (not wrapped)
@@ -114,5 +117,6 @@ export async function getArticleById(
   } catch (error) {
     console.error('Error fetching article:', error);
     res.status(500).json({ error: 'Internal server error' });
+    return;
   }
 }
