@@ -352,6 +352,8 @@ curl -X POST http://localhost:3000/auth/login \
 
 使用阿里云百炼（DashScope）的 Qwen3-TTS-Flash 模型生成语音。
 
+#### 本地调用 API 并下载音频文件
+
 **默认使用 Jennifer 语音：**
 ```bash
 curl -X POST http://localhost:3000/tts \
@@ -366,6 +368,106 @@ curl -X POST http://localhost:3000/tts \
   -H "Content-Type: application/json" \
   -d '{"text":"欢迎来到我们的播客，Hello everyone, this is Jennifer speaking.", "voice": "Cherry"}' \
   --output tts_cherry.wav
+```
+
+**将 WAV 转换为 MP3（需要安装 ffmpeg）：**
+```bash
+# 先下载 WAV 文件
+curl -X POST http://localhost:3000/tts \
+  -H "Content-Type: application/json" \
+  -d '{"text":"你的文本内容"}' \
+  --output output.wav
+
+# 转换为 MP3
+ffmpeg -i output.wav -acodec libmp3lame output.mp3
+```
+
+**使用 Python 脚本调用并转换为 MP3：**
+```python
+import requests
+import subprocess
+import os
+
+# API 端点
+url = "http://localhost:3000/tts"
+
+# 请求数据
+data = {
+    "text": "欢迎来到我们的播客，Hello everyone, this is Jennifer speaking.",
+    "voice": "Jennifer"  # 可选
+}
+
+# 发送请求
+response = requests.post(url, json=data)
+
+if response.status_code == 200:
+    # 保存 WAV 文件
+    wav_file = "output.wav"
+    with open(wav_file, "wb") as f:
+        f.write(response.content)
+    
+    # 转换为 MP3
+    mp3_file = "output.mp3"
+    subprocess.run([
+        "ffmpeg", "-i", wav_file, 
+        "-acodec", "libmp3lame", 
+        "-q:a", "2",  # 高质量
+        mp3_file,
+        "-y"  # 覆盖已存在的文件
+    ])
+    
+    # 删除临时 WAV 文件（可选）
+    os.remove(wav_file)
+    
+    print(f"✓ MP3 文件已保存: {mp3_file}")
+else:
+    print(f"✗ 错误: {response.status_code} - {response.text}")
+```
+
+**使用 Node.js 脚本调用并转换为 MP3：**
+```javascript
+const fs = require('fs');
+const { execSync } = require('child_process');
+const fetch = require('node-fetch');
+
+async function generateTTSAndConvert() {
+  const url = 'http://localhost:3000/tts';
+  const data = {
+    text: '欢迎来到我们的播客，Hello everyone, this is Jennifer speaking.',
+    voice: 'Jennifer'  // 可选
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (response.ok) {
+      const buffer = await response.buffer();
+      const wavFile = 'output.wav';
+      const mp3File = 'output.mp3';
+
+      // 保存 WAV 文件
+      fs.writeFileSync(wavFile, buffer);
+
+      // 转换为 MP3（需要安装 ffmpeg）
+      execSync(`ffmpeg -i ${wavFile} -acodec libmp3lame -q:a 2 ${mp3File} -y`);
+
+      // 删除临时 WAV 文件（可选）
+      fs.unlinkSync(wavFile);
+
+      console.log(`✓ MP3 文件已保存: ${mp3File}`);
+    } else {
+      console.error(`✗ 错误: ${response.status} - ${await response.text()}`);
+    }
+  } catch (error) {
+    console.error('✗ 请求失败:', error);
+  }
+}
+
+generateTTSAndConvert();
 ```
 
 **请求体：**
@@ -423,11 +525,292 @@ TTS 生成失败：
 
 用于处理长文本（如整篇文章）的分段朗读。接口会自动将文本按约 600 字符一段进行智能分段，优先在标点符号处分割，然后为每一段生成语音。
 
-**示例：**
+#### 本地调用并下载分段音频
+
+**基本调用：**
 ```bash
 curl -X POST http://localhost:3000/tts/segments \
   -H "Content-Type: application/json" \
-  -d '{"text": "一大段很长很长的文章内容，可能包含上千字。这段文字会被自动分成多段，每段大约600字符，优先在句号、问号、感叹号等标点处分割。每一段都会生成对应的音频，并以 base64 编码返回给客户端。"}'
+  -d '{"text": "一大段很长很长的文章内容，可能包含上千字。这段文字会被自动分成多段，每段大约600字符，优先在句号、问号、感叹号等标点处分割。每一段都会生成对应的音频，并以 base64 编码返回给客户端。"}' \
+  -o segments_response.json
+```
+
+#### 批量调用：合并多个音频段为一个 MP3 文件
+
+**使用 Python 脚本批量处理并合并：**
+```python
+import requests
+import base64
+import subprocess
+import json
+import os
+from pathlib import Path
+
+def batch_tts_and_merge(text, output_file="merged_output.mp3", voice="Jennifer"):
+    """
+    调用 TTS segments API，下载所有音频段，合并为一个 MP3 文件
+    
+    Args:
+        text: 要转换的长文本
+        output_file: 输出的 MP3 文件名
+        voice: 语音类型（可选，默认 Jennifer）
+    """
+    url = "http://localhost:3000/tts/segments"
+    data = {
+        "text": text,
+        "voice": voice
+    }
+    
+    print(f"📤 发送请求到 {url}...")
+    response = requests.post(url, json=data)
+    
+    if response.status_code != 200:
+        print(f"✗ 错误: {response.status_code} - {response.text}")
+        return False
+    
+    result = response.json()
+    segments = result.get("segments", [])
+    total_segments = result.get("totalSegments", 0)
+    
+    print(f"✓ 收到 {total_segments} 个音频段")
+    
+    # 创建临时目录
+    temp_dir = Path("temp_audio_segments")
+    temp_dir.mkdir(exist_ok=True)
+    
+    # 下载并保存每个音频段
+    wav_files = []
+    for i, segment in enumerate(segments):
+        audio_base64 = segment["audioBase64"]
+        audio_data = base64.b64decode(audio_base64)
+        
+        wav_file = temp_dir / f"segment_{i:03d}.wav"
+        with open(wav_file, "wb") as f:
+            f.write(audio_data)
+        
+        wav_files.append(wav_file)
+        print(f"  ✓ 已保存段 {i+1}/{total_segments}: {wav_file}")
+    
+    # 合并所有 WAV 文件为一个文件
+    print(f"\n🔄 合并 {len(wav_files)} 个音频段...")
+    
+    # 创建文件列表（ffmpeg concat 需要）
+    concat_file = temp_dir / "concat_list.txt"
+    with open(concat_file, "w") as f:
+        for wav_file in wav_files:
+            f.write(f"file '{wav_file.absolute()}'\n")
+    
+    # 使用 ffmpeg 合并并转换为 MP3
+    merged_wav = temp_dir / "merged.wav"
+    subprocess.run([
+        "ffmpeg", "-f", "concat", "-safe", "0",
+        "-i", str(concat_file),
+        "-c", "copy",
+        str(merged_wav),
+        "-y"
+    ], check=True, capture_output=True)
+    
+    # 转换为 MP3
+    subprocess.run([
+        "ffmpeg", "-i", str(merged_wav),
+        "-acodec", "libmp3lame",
+        "-q:a", "2",  # 高质量
+        output_file,
+        "-y"
+    ], check=True, capture_output=True)
+    
+    # 清理临时文件
+    import shutil
+    shutil.rmtree(temp_dir)
+    
+    print(f"✓ 合并完成！MP3 文件已保存: {output_file}")
+    return True
+
+# 使用示例
+if __name__ == "__main__":
+    long_text = """
+    这是一篇很长的文章。第一段内容在这里。
+    
+    这是第二段内容。文章可以包含多个段落，系统会自动分段处理。
+    
+    这是第三段内容。每段都会被转换为音频，然后合并为一个完整的 MP3 文件。
+    """
+    
+    batch_tts_and_merge(
+        text=long_text,
+        output_file="article_audio.mp3",
+        voice="Jennifer"
+    )
+```
+
+**使用 Node.js 脚本批量处理并合并：**
+```javascript
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+const fetch = require('node-fetch');
+
+async function batchTTSAndMerge(text, outputFile = 'merged_output.mp3', voice = 'Jennifer') {
+  const url = 'http://localhost:3000/tts/segments';
+  const data = { text, voice };
+
+  console.log(`📤 发送请求到 ${url}...`);
+  
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      console.error(`✗ 错误: ${response.status} - ${await response.text()}`);
+      return false;
+    }
+
+    const result = await response.json();
+    const segments = result.segments || [];
+    const totalSegments = result.totalSegments || 0;
+
+    console.log(`✓ 收到 ${totalSegments} 个音频段`);
+
+    // 创建临时目录
+    const tempDir = path.join(__dirname, 'temp_audio_segments');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir);
+    }
+
+    // 下载并保存每个音频段
+    const wavFiles = [];
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+      const audioData = Buffer.from(segment.audioBase64, 'base64');
+      
+      const wavFile = path.join(tempDir, `segment_${String(i).padStart(3, '0')}.wav`);
+      fs.writeFileSync(wavFile, audioData);
+      
+      wavFiles.push(wavFile);
+      console.log(`  ✓ 已保存段 ${i + 1}/${totalSegments}: ${wavFile}`);
+    }
+
+    // 合并所有 WAV 文件
+    console.log(`\n🔄 合并 ${wavFiles.length} 个音频段...`);
+
+    // 创建文件列表（ffmpeg concat 需要）
+    const concatFile = path.join(tempDir, 'concat_list.txt');
+    const concatContent = wavFiles.map(f => `file '${f.replace(/'/g, "'\\''")}'`).join('\n');
+    fs.writeFileSync(concatFile, concatContent);
+
+    // 使用 ffmpeg 合并并转换为 MP3
+    const mergedWav = path.join(tempDir, 'merged.wav');
+    execSync(`ffmpeg -f concat -safe 0 -i "${concatFile}" -c copy "${mergedWav}" -y`, {
+      stdio: 'inherit'
+    });
+
+    execSync(`ffmpeg -i "${mergedWav}" -acodec libmp3lame -q:a 2 "${outputFile}" -y`, {
+      stdio: 'inherit'
+    });
+
+    // 清理临时文件
+    fs.rmSync(tempDir, { recursive: true, force: true });
+
+    console.log(`✓ 合并完成！MP3 文件已保存: ${outputFile}`);
+    return true;
+  } catch (error) {
+    console.error('✗ 请求失败:', error);
+    return false;
+  }
+}
+
+// 使用示例
+const longText = `
+这是一篇很长的文章。第一段内容在这里。
+
+这是第二段内容。文章可以包含多个段落，系统会自动分段处理。
+
+这是第三段内容。每段都会被转换为音频，然后合并为一个完整的 MP3 文件。
+`;
+
+batchTTSAndMerge(
+  longText,
+  'article_audio.mp3',
+  'Jennifer'
+);
+```
+
+**使用 Shell 脚本批量处理（需要安装 jq 和 ffmpeg）：**
+```bash
+#!/bin/bash
+
+# 配置
+API_URL="http://localhost:3000/tts/segments"
+TEXT_FILE="article.txt"  # 包含要转换的文本
+OUTPUT_MP3="merged_output.mp3"
+VOICE="Jennifer"
+
+# 读取文本内容
+TEXT=$(cat "$TEXT_FILE")
+
+# 调用 API
+echo "📤 发送请求到 $API_URL..."
+RESPONSE=$(curl -s -X POST "$API_URL" \
+  -H "Content-Type: application/json" \
+  -d "{\"text\": $(echo "$TEXT" | jq -Rs .), \"voice\": \"$VOICE\"}")
+
+# 检查响应
+if echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+  echo "✗ 错误: $(echo "$RESPONSE" | jq -r '.error')"
+  exit 1
+fi
+
+# 创建临时目录
+TEMP_DIR="temp_audio_segments"
+mkdir -p "$TEMP_DIR"
+
+# 提取并保存每个音频段
+TOTAL=$(echo "$RESPONSE" | jq '.totalSegments')
+echo "✓ 收到 $TOTAL 个音频段"
+
+for i in $(seq 0 $((TOTAL - 1))); do
+  SEGMENT=$(echo "$RESPONSE" | jq -r ".segments[$i]")
+  AUDIO_B64=$(echo "$SEGMENT" | jq -r '.audioBase64')
+  WAV_FILE="$TEMP_DIR/segment_$(printf "%03d" $i).wav"
+  
+  echo "$AUDIO_B64" | base64 -d > "$WAV_FILE"
+  echo "  ✓ 已保存段 $((i + 1))/$TOTAL: $WAV_FILE"
+done
+
+# 合并音频段
+echo ""
+echo "🔄 合并 $TOTAL 个音频段..."
+
+# 创建文件列表
+CONCAT_FILE="$TEMP_DIR/concat_list.txt"
+for wav in "$TEMP_DIR"/segment_*.wav; do
+  echo "file '$wav'" >> "$CONCAT_FILE"
+done
+
+# 使用 ffmpeg 合并并转换为 MP3
+MERGED_WAV="$TEMP_DIR/merged.wav"
+ffmpeg -f concat -safe 0 -i "$CONCAT_FILE" -c copy "$MERGED_WAV" -y
+ffmpeg -i "$MERGED_WAV" -acodec libmp3lame -q:a 2 "$OUTPUT_MP3" -y
+
+# 清理临时文件
+rm -rf "$TEMP_DIR"
+
+echo "✓ 合并完成！MP3 文件已保存: $OUTPUT_MP3"
+```
+
+**使用示例：**
+```bash
+# 保存脚本为 batch_tts.sh
+chmod +x batch_tts.sh
+
+# 创建文本文件
+echo "你的长文本内容..." > article.txt
+
+# 运行脚本
+./batch_tts.sh
 ```
 
 **请求体：**
